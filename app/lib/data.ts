@@ -9,7 +9,14 @@ import {
 } from './definitions';
 import { formatCurrency } from './utils';
 
-const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
+// Configure the postgres client with appropriate timeout settings
+const sql = postgres(process.env.POSTGRES_URL!, { 
+  ssl: 'require',
+  connect_timeout: 60,  // 60 seconds
+  idle_timeout: 60,     // 60 seconds
+  max_lifetime: 60 * 5, // 5 minutes
+  prepare: false        // Disable prepared statements which can sometimes cause issues
+});
 
 export async function fetchRevenue() {
   try {
@@ -32,6 +39,7 @@ export async function fetchRevenue() {
 
 export async function fetchLatestInvoices() {
   try {
+    console.log('Fetching latest invoices...');
     const data = await sql<LatestInvoiceRaw[]>`
       SELECT invoices.amount, customers.name, customers.image_url, customers.email, invoices.id
       FROM invoices
@@ -39,13 +47,15 @@ export async function fetchLatestInvoices() {
       ORDER BY invoices.date DESC
       LIMIT 5`;
 
+    console.log(`Found ${data.length} latest invoices`);
+    
     const latestInvoices = data.map((invoice) => ({
       ...invoice,
       amount: formatCurrency(invoice.amount),
     }));
     return latestInvoices;
   } catch (error) {
-    console.error('Database Error:', error);
+    console.error('Database Error fetching latest invoices:', error);
     throw new Error('Failed to fetch the latest invoices.');
   }
 }
